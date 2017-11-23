@@ -18,6 +18,7 @@ void readBDT() {
    Int_t emuSgn_;
    Float_t emuPhistar_;
    Float_t emuDpt_;
+   Float_t emuDptrel_;
    Float_t emuDeta_;
    Float_t emuDphi_;
    Float_t emuDR_;
@@ -26,11 +27,11 @@ void readBDT() {
    reader->AddVariable( "emuPt", &emuPt_ );
    reader->AddVariable( "abs(emuRap)", &absemuRap_ );
    reader->AddVariable( "emuMass", &emuMass_ );
-   reader->AddVariable( "emuPhistar", &emuPhistar_ );
-   reader->AddVariable( "emuDpt", &emuDpt_ );
+   // reader->AddVariable( "emuPhistar", &emuPhistar_ );
+   reader->AddVariable( "emuDpt/emuPt", &emuDptrel_ );
    reader->AddVariable( "emuDeta", &emuDeta_ );
    reader->AddVariable( "emuDphi", &emuDphi_ );
-   reader->AddVariable( "emuDR", &emuDR_ );
+   // reader->AddVariable( "emuDR", &emuDR_ );
    reader->AddSpectator( "emuSgn", &emuSgn_ );
    reader->AddSpectator( "nJt", &nJt_ );
    reader->AddVariable( "discr_csvV1[0]", discr_csvV1_ );
@@ -41,9 +42,12 @@ void readBDT() {
    TString prefix = "TMVAClassification";
 
    // Book method(s)
-   TString methodName = TString("BDTG_bjet") + TString(" method");
-   TString weightfile =  TString("weights/TMVAClassification_") + TString("BDTG_bjet") + TString(".weights.xml");
-   reader->BookMVA( methodName, weightfile ); 
+   TString methodNameShort[5] {"BDTG","MLP","LikelihoodPCA","LikelihoodMIX", "LikelihoodKDE"};
+   for (int i=0; i<5; i++) {
+      TString methodName = methodNameShort[i] + TString("_bjet") + TString(" method");
+      TString weightfile =  TString("weights/TMVAClassification_") + methodNameShort[i] + TString("_bjet") + TString(".weights.xml");
+      reader->BookMVA( methodName, weightfile ); 
+   }
 
    TFile *f = new TFile("emuSkim_data.root");
    TTree *tr = (TTree*) f->Get("skimTree");
@@ -65,8 +69,12 @@ void readBDT() {
    TH1F *hbdtSS2 = new TH1F("hbdtSS2","",40,-1,1);
 
    TTree *tr2 = tr->CloneTree(0);
-   float bdtval;
-   tr2->Branch("bdtval",&bdtval,"bdtval/F");
+   float bdtg, mlp, lhpca, lhmix, lhkde;
+   tr2->Branch("bdtg",&bdtg,"bdtg/F");
+   tr2->Branch("mlp",&mlp,"mlp/F");
+   tr2->Branch("lhpca",&lhpca,"lhpca/F");
+   tr2->Branch("lhmix",&lhmix,"lhmix/F");
+   tr2->Branch("lhkde",&lhkde,"lhkde/F");
    for (int i=0; i<tr->GetEntries(); i++) {
       tr->GetEntry(i);
       if (emuPt_<=0) continue;
@@ -74,11 +82,17 @@ void readBDT() {
       if (discr_csvV1_[0]<=-1) continue;
       
       absemuRap_ = fabs(emuRap_);
-      bdtval = reader->EvaluateMVA("BDTG_bjet method");
+      emuDptrel_ = emuDpt_/emuPt_;
+      bdtg = reader->EvaluateMVA("BDTG_bjet method");
+      mlp = reader->EvaluateMVA("MLP_bjet method");
+      lhpca = reader->EvaluateMVA("LikelihoodPCA_bjet method");
+      lhmix = reader->EvaluateMVA("LikelihoodMIX_bjet method");
+      lhkde = reader->EvaluateMVA("LikelihoodKDE_bjet method");
       
-      if (emuSgn_==0) hbdtOS->Fill(bdtval);
-      else if(i<tr->GetEntries()/2) hbdtSS1->Fill(bdtval);
-      else hbdtSS2->Fill(bdtval);
+      float mvaval = lhpca;
+      if (emuSgn_==0) hbdtOS->Fill(mvaval);
+      else if(i<tr->GetEntries()/2) hbdtSS1->Fill(mvaval);
+      else hbdtSS2->Fill(mvaval);
 
       tr2->Fill();
    }

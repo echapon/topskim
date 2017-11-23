@@ -556,7 +556,7 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
       int njets = 0;
       for(int jetIter = 0; jetIter < nref; jetIter++){
         if(jtpt[jetIter]<jetPtCut) continue;
-        if(fabs(jteta[jetIter])<jetEtaCut) continue;
+        if(fabs(jteta[jetIter])>jetEtaCut) continue;
         jtPt_[njets]  = jtpt[jetIter];
         jtEta_[njets] = jteta[jetIter];
         jtPhi_[njets] = jtphi[jetIter];
