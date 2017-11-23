@@ -3,6 +3,7 @@
 #include "TNamed.h"
 #include "TMath.h"
 #include "TLorentzVector.h"
+#include "TChain.h"
 
 #include "LepJetsSkimTree.h"
 #include <string>
@@ -13,14 +14,18 @@
 
 #include "Helpers/EnergyRegression.h"
 
+#define eleMass 0.5109989461e-3
+#define muMass  105.6583745e-3
+
 const bool isDebug = false;
 
 const float jetPtCut = 25.;
+const float jetEtaCut = 2.;
 
 const float lepPtCut = 15;
 
 // FIXME: Need to check lepton selections for PbPb
-const float muEtaCut = 2.1;
+const float muEtaCut = 2.4;
 const float muPtCut = 15;
 
 const float muChi2NDFCut   = 10;
@@ -75,7 +80,9 @@ int getCentBinEleId(double cent) {
   return centBin;
 }
 
-double calcLeptonIsolation(float lepPt, float lepEta, float lepPhi, std::vector<float> *pfPt, std::vector<float> *pfEta, std::vector<float> *pfPhi);
+double calcLeptonIsolation(float lepPt, float lepEta, float lepPhi, std::vector<float> *pfPt, std::vector<float> *pfEta, std::vector<float> *pfPhi, std::vector<int> *pfId, bool tkonly=false);
+
+double phistar(TLorentzVector v1, TLorentzVector v2);
 
 void makeEMuSkim(const std::string outFileName = "", const std::string inFileName = "", bool isMC = false)
 {
@@ -351,12 +358,14 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
       float tempMuEta_[nLep];
       int tempMuChg_[nLep];
       float tempMuIso_[nLep];     
+      float tempMuIsoTk_[nLep];     
  
       float tempElePt_[nLep];
       float tempElePhi_[nLep];
       float tempEleEta_[nLep];
       int tempEleChg_[nLep];
       float tempEleIso_[nLep];            
+      float tempEleIsoTk_[nLep];            
 
       for(int lepIter = 0; lepIter < nLep; lepIter++){
 	lepPt_[lepIter] = -999;
@@ -365,6 +374,7 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
 	lepChg_[lepIter] = -999;
         lepID_[lepIter] = -999;
         lepIso_[lepIter] = -999;
+        lepIsoTk_[lepIter] = -999;
        }
        
        for(int lepIter = 0; lepIter < 2; lepIter++){
@@ -373,12 +383,14 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
 	tempMuEta_[lepIter] = -999;
 	tempMuChg_[lepIter] = -999;
         tempMuIso_[lepIter] = -999;
+        tempMuIsoTk_[lepIter] = -999;
 	
 	tempElePt_[lepIter] = -999;
 	tempElePhi_[lepIter] = -999;
 	tempEleEta_[lepIter] = -999;
 	tempEleChg_[lepIter] = -999;
         tempEleIso_[lepIter] = -999;
+        tempEleIsoTk_[lepIter] = -999;
        }
        
        for(int ij = 0; ij<nMaxJets; ++ij) {
@@ -410,19 +422,21 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
 	  tempMuEta_[1] = tempMuEta_[0];
 	  tempMuChg_[1] = tempMuChg_[0];
 	  tempMuIso_[1] = tempMuIso_[0]; 
+	  tempMuIsoTk_[1] = tempMuIsoTk_[0]; 
  
 	  tempMuPt_[0]  = fForestMu.muPt->at(muIter);
 	  tempMuPhi_[0] = fForestMu.muPhi->at(muIter);
 	  tempMuEta_[0] = fForestMu.muEta->at(muIter);
 	  tempMuChg_[0] = fForestMu.muCharge->at(muIter);
-          tempMuIso_[0] = calcLeptonIsolation(fForestMu.muPt->at(muIter),fForestMu.muEta->at(muIter),fForestMu.muPhi->at(muIter),pfPt,pfEta,pfPhi); //iso;
+          tempMuIso_[0] = calcLeptonIsolation(fForestMu.muPt->at(muIter),fForestMu.muEta->at(muIter),fForestMu.muPhi->at(muIter),pfPt,pfEta,pfPhi,pfId); //iso;
+          tempMuIsoTk_[0] = calcLeptonIsolation(fForestMu.muPt->at(muIter),fForestMu.muEta->at(muIter),fForestMu.muPhi->at(muIter),pfPt,pfEta,pfPhi,pfId,true); //tk iso;
 	}
 	else if(fForestMu.muPt->at(muIter) > tempMuPt_[1]){
 	  tempMuPt_[1]  = fForestMu.muPt->at(muIter);
 	  tempMuPhi_[1] = fForestMu.muPhi->at(muIter);
 	  tempMuEta_[1] = fForestMu.muEta->at(muIter);
 	  tempMuChg_[1] = fForestMu.muCharge->at(muIter);
-          tempMuIso_[1] = calcLeptonIsolation(fForestMu.muPt->at(muIter),fForestMu.muEta->at(muIter),fForestMu.muPhi->at(muIter),pfPt,pfEta,pfPhi);//iso;
+          tempMuIsoTk_[1] = calcLeptonIsolation(fForestMu.muPt->at(muIter),fForestMu.muEta->at(muIter),fForestMu.muPhi->at(muIter),pfPt,pfEta,pfPhi,pfId,true);//tk iso;
 	}
       }
 
@@ -464,19 +478,22 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
 	  tempEleEta_[1] = tempEleEta_[0];
 	  tempEleChg_[1] = tempEleChg_[0];
           tempEleIso_[1] = tempEleIso_[0];	 
+          tempEleIsoTk_[1] = tempEleIsoTk_[0];	 
  
 	  tempElePt_[0] = fForestEle.elePt->at(eleIter);
 	  tempElePhi_[0] = fForestEle.elePhi->at(eleIter);
 	  tempEleEta_[0] = fForestEle.eleEta->at(eleIter);
 	  tempEleChg_[0] = fForestEle.eleCharge->at(eleIter);
-          tempEleIso_[0] = calcLeptonIsolation(fForestEle.elePt->at(eleIter),fForestEle.eleEta->at(eleIter),fForestEle.elePhi->at(eleIter),pfPt,pfEta,pfPhi); //iso;
+          tempEleIso_[0] = calcLeptonIsolation(fForestEle.elePt->at(eleIter),fForestEle.eleEta->at(eleIter),fForestEle.elePhi->at(eleIter),pfPt,pfEta,pfPhi,pfId); //iso;
+          tempEleIsoTk_[0] = calcLeptonIsolation(fForestEle.elePt->at(eleIter),fForestEle.eleEta->at(eleIter),fForestEle.elePhi->at(eleIter),pfPt,pfEta,pfPhi,pfId,true); //tk iso;
 	}
 	else if(fForestEle.elePt->at(eleIter) > tempElePt_[1]){
 	  tempElePt_[1]  = fForestEle.elePt->at(eleIter);
 	  tempElePhi_[1] = fForestEle.elePhi->at(eleIter);
 	  tempEleEta_[1] = fForestEle.eleEta->at(eleIter);
 	  tempEleChg_[1] = fForestEle.eleCharge->at(eleIter);
-          tempEleIso_[1] = calcLeptonIsolation(fForestEle.elePt->at(eleIter),fForestEle.eleEta->at(eleIter),fForestEle.elePhi->at(eleIter),pfPt,pfEta,pfPhi);//iso;
+          tempEleIso_[1] = calcLeptonIsolation(fForestEle.elePt->at(eleIter),fForestEle.eleEta->at(eleIter),fForestEle.elePhi->at(eleIter),pfPt,pfEta,pfPhi,pfId);//iso;
+          tempEleIsoTk_[1] = calcLeptonIsolation(fForestEle.elePt->at(eleIter),fForestEle.eleEta->at(eleIter),fForestEle.elePhi->at(eleIter),pfPt,pfEta,pfPhi,pfId,true);//tk iso;
 	}
       }
 
@@ -490,6 +507,7 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
         lepChg_[lepIter] = tempMuChg_[muIter];
         lepID_[lepIter] = muID;
         lepIso_[lepIter] = tempMuIso_[muIter];
+        lepIsoTk_[lepIter] = tempMuIsoTk_[muIter];
         ++lepIter;
       }
       for(int eleIter = 0; eleIter < 2; eleIter++){
@@ -500,19 +518,56 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
         lepChg_[lepIter] = tempEleChg_[eleIter];
         lepID_[lepIter] = eleID;
         lepIso_[lepIter] = tempEleIso_[eleIter];
+        lepIsoTk_[lepIter] = tempEleIsoTk_[eleIter];
         ++lepIter;
       }
       if(lepIter<2) continue;
       nLep_ = lepIter;
 
+      // emu variables
+      if (tempMuPt_[0]>0 && tempElePt_[0]>0) {
+         TLorentzVector tele, tmu, temu;
+         tele.SetPtEtaPhiM(tempElePt_[0],tempEleEta_[0],tempElePhi_[0],eleMass);
+         tmu.SetPtEtaPhiM(tempMuPt_[0],tempMuEta_[0],tempMuPhi_[0],muMass);
+         temu = tele+tmu;
+         emuPt_ = temu.Pt();
+         emuRap_ = temu.Rapidity();
+         emuPhi_ = temu.Phi();
+         emuMass_ = temu.M();
+         emuSgn_ = tempMuChg_[0]+tempEleChg_[0];
+         emuPhistar_ = phistar(tele,tmu);
+         emuDpt_ = fabs(tmu.Pt()-tele.Pt());
+         emuDeta_ = fabs(tmu.Eta()-tele.Eta());
+         emuDphi_ = fabs(tmu.DeltaPhi(tele));
+         emuDR_ = tmu.DeltaR(tele);
+      } else {
+         emuPt_=-999;
+         emuRap_=-999;
+         emuPhi_=-999;
+         emuMass_=-999;
+         emuSgn_=-999;
+         emuPhistar_=-999;
+         emuDpt_=-999;
+         emuDeta_=-999;
+         emuDphi_=-999;
+         emuDR_=-999;
+      }
+
       int njets = 0;
       for(int jetIter = 0; jetIter < nref; jetIter++){
         if(jtpt[jetIter]<jetPtCut) continue;
+        if(fabs(jteta[jetIter])<jetEtaCut) continue;
         jtPt_[njets]  = jtpt[jetIter];
         jtEta_[njets] = jteta[jetIter];
         jtPhi_[njets] = jtphi[jetIter];
         jtM_[njets]   = jtm[jetIter]; 
         discr_csvV1_[njets] = discr_csvV1[jetIter];
+        // delta R with leptons
+        jtLepDR_[njets] = 999.;
+        for (int lepIter=0; lepIter<nLep_; lepIter++) {
+           double dr = sqrt(pow(jtEta_[njets]-lepEta_[lepIter],2)+pow(TVector2::Phi_mpi_pi(jtPhi_[njets]-lepPhi_[lepIter]),2));
+           if (dr<jtLepDR_[njets]) jtLepDR_[njets] = dr;
+        }
         ++njets;
       }
       nJt_ = njets;
@@ -537,17 +592,19 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
   return;
 }
 
-double calcLeptonIsolation(float lepPt, float lepEta, float lepPhi, std::vector<float> *pfPt, std::vector<float> *pfEta, std::vector<float> *pfPhi) {
+double calcLeptonIsolation(float lepPt, float lepEta, float lepPhi, std::vector<float> *pfPt, std::vector<float> *pfEta, std::vector<float> *pfPhi, std::vector<int> *pfId, bool tkonly) {
   //calculate lepton isolation from pf candidates.
   //Isolation cone R=0.3
-  //excluding pf candidates at a distance less than 0.03 from lepton
   
   double conePt = 0.;
   for(unsigned int i = 0; i<pfPt->size(); ++i) {
+     if (!tkonly && pfId->at(i)!=1 && pfId->at(i)!=4 && pfId->at(i)!=5) continue; // keep only tracks, photons and neutral hadrons
+     if (tkonly && pfId->at(i)!=1) continue; // keep only tracks for tkonly
 
     double deltaR = sqrt(pow(acos(cos(lepPhi-pfPhi->at(i))),2)+pow(lepEta-pfEta->at(i),2));
 
-    if(deltaR<0.03 || deltaR>0.3) continue;
+    // if(deltaR<0.03 || deltaR>0.3) continue;
+    if(deltaR>0.3) continue;
 
     conePt+=pfPt->at(i);
   }
@@ -555,4 +612,12 @@ double calcLeptonIsolation(float lepPt, float lepEta, float lepPhi, std::vector<
   if(lepPt>0.) relIso = conePt/lepPt;
   
   return relIso;
+}
+
+double phistar(TLorentzVector v1, TLorentzVector v2) {
+   double eta1 = v1.Eta();
+   double eta2 = v2.Eta();
+   double phi1 = v1.Phi();
+   double phi2 = v2.Phi();
+   return tan((TMath::Pi()-fabs(TVector2::Phi_mpi_pi(phi2-phi1)))/2.)*sin(acos(tanh(fabs(eta2-eta1)/2.)));
 }
