@@ -27,7 +27,7 @@ const float jetPtCut = 25.;
 const float jetEtaCut = 2.;
 
 const float lepPtrelCut = -1;//5;
-const float lepDRjetCut = 0.2;
+const float lepDRjetCut = 0.1;
 
 // FIXME: Need to check lepton selections for PbPb
 const float muEtaCut = 2.4;
@@ -100,7 +100,6 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
       return;
    }
 
-   if(isDebug) std::cout << __LINE__ << std::endl;
 
    TFile* outFile_p = new TFile(outFileName.c_str(), "RECREATE");
    skimTree_p = new TTree("skimTree", "skimTree");
@@ -337,15 +336,12 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
    skimAnaTree_p->SetBranchAddress("pprimaryVertexFilter",&pprimaryVertexFilter);
    skimAnaTree_p->SetBranchAddress("pcollisionEventSelection",&pcollisionEventSelection);
 
-   if(isDebug) std::cout << __LINE__ << std::endl;
 
-   if(isDebug) std::cout << __LINE__ << std::endl;
 
    int nEntries = (int)lepTree_p->GetEntries();
    //nEntries = 100;
    int entryDiv = ((int)(nEntries/20));
 
-   if(isDebug) std::cout << __LINE__ << std::endl;
 
    map<string,int> cnt;
    cnt["tot"]=0;
@@ -414,10 +410,8 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
    cnt["matche11"]=0;
 
    for(int entry = 0; entry < nEntries; entry++){
-      if(isDebug) std::cout << __LINE__ << std::endl;
 
       if(entry%entryDiv == 0 && nEntries >= 10000) std::cout << "Entry # " << entry << "/" << nEntries << std::endl;
-      if(isDebug) std::cout << __LINE__ << std::endl;
 
       lepTree_p->GetEntry(entry);
       jetTree_p->GetEntry(entry);
@@ -445,7 +439,6 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
       
       if (!isMC && !passed_) continue;
 
-      if(isDebug) std::cout << __LINE__ << std::endl;
 
       if (isMC) {
          genMuPt_=-999.;
@@ -544,11 +537,11 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
          jtEta_[ij] = -999.;
          jtPhi_[ij] = -999.;
          jtM_[ij] = -999.;
+         jtDRlep_[ij] = -999.;
          discr_csvV1_[ij] = -999.;
          refparton_flavorForB_[ij] = -999.;
       }
 
-      if(isDebug) std::cout << __LINE__ << std::endl;
 
       int njets = 0;
       TLorentzVector mht;
@@ -703,7 +696,6 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
          if (matche) cnt["matche11"]++;
          // if (elePtrel<lepPtrelCut) continue;
 
-         if(isDebug) std::cout << __LINE__ << std::endl;
          float ptEle = fForestEle.elePt->at(eleIter);
          //Printf("ptEle: %f",ptEle);
          float eleCorr = 1.;
@@ -876,6 +868,37 @@ void makeEMuSkim(const std::string outFileName = "", const std::string inFileNam
          emuMinJetPt_=-999;
       }
       MHT_ = mht.Pt();
+
+      // skim the jet collection by removing jets corresponding to a lepton
+      int inew=0;
+      for (int i=0; i<nJt_; i++) {
+         TLorentzVector tj; tj.SetPtEtaPhiM(jtPt_[i],jtEta_[i],jtPhi_[i],jtM_[i]);
+         double drmin=999;
+         for (int j=0; j<nLep_; j++) {
+            TLorentzVector tl; tl.SetPtEtaPhiM(lepPt_[j],lepEta_[j],lepPhi_[j],fabs(lepID_[j])==11 ? eleMass : muMass);
+            double dr = tj.DeltaR(tl);
+            drmin = min(dr,drmin);
+         }
+         if (drmin < lepDRjetCut) continue;
+
+         jtPt_[inew] = jtPt_[i];
+         jtEta_[inew] = jtEta_[i];
+         jtPhi_[inew] = jtPhi_[i];
+         jtM_[inew] = jtM_[i];
+         jtDRlep_[inew] = drmin;
+         discr_csvV1_[inew] = discr_csvV1_[i];
+         refparton_flavorForB_[inew] = refparton_flavorForB_[i];
+         inew++;
+      }
+      for(int ij=inew; ij<nJt_; ++ij) {
+         jtPt_[ij] = -999.;
+         jtEta_[ij] = -999.;
+         jtPhi_[ij] = -999.;
+         jtM_[ij] = -999.;
+         jtDRlep_[ij] = -999.;
+         discr_csvV1_[ij] = -999.;
+         refparton_flavorForB_[ij] = -999.;
+      }
 
       skimTree_p->Fill();
 
